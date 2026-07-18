@@ -34,6 +34,9 @@ class TileProfiles:
     profiles: np.ndarray  # (N, P) float32
     grid_rc: np.ndarray  # (N, 2) int32 — sampled (row, col) in the stored grid
     offsets: np.ndarray  # (P,) float32 — r values, -halfwidth..+halfwidth
+    # Noise sigma estimated from RAW slab voxels (before trilinear interpolation,
+    # which attenuates noise and would bias any profile-based estimate low).
+    noise_sigma_raw: float = np.nan
 
     @property
     def n_points(self) -> int:
@@ -46,6 +49,22 @@ class TileProfiles:
         support = np.isfinite(self.profiles).sum(axis=0)
         med[support < 3] = np.nan
         return med.astype(np.float32)
+
+
+def _slab_noise_sigma(slab: np.ndarray) -> float:
+    """Robust noise sigma from raw voxel second differences along z.
+
+    Var(second difference) = 6 sigma^2 for i.i.d. noise; the MAD keeps the
+    estimate robust to the sheet's smooth curvature (a minority of voxels).
+    """
+    if slab.shape[0] < 4:
+        return np.nan
+    d2 = slab[2:] - 2.0 * slab[1:-1] + slab[:-2]
+    d2 = d2[np.isfinite(d2)]
+    if d2.size < 64:
+        return np.nan
+    mad = np.median(np.abs(d2 - np.median(d2)))
+    return float(1.4826 * mad / np.sqrt(6.0))
 
 
 class NormalProfileSampler:
@@ -112,6 +131,7 @@ class NormalProfileSampler:
         slab = np.asarray(
             self.volume[lo[0]:hi[0], lo[1]:hi[1], lo[2]:hi[2]], dtype=np.float32
         )
+        sigma_raw = _slab_noise_sigma(slab)
 
         local = (czyx - lo[None, None, :]).reshape(-1, 3).T  # (3, N*P)
         vals = map_coordinates(slab, local, order=1, mode="constant", cval=np.nan)
@@ -129,6 +149,7 @@ class NormalProfileSampler:
             profiles=profiles,
             grid_rc=np.stack([gr, gc], axis=1).astype(np.int32),
             offsets=self.offsets,
+            noise_sigma_raw=sigma_raw,
         )
 
     def sample_grid(self, grid: TileGrid):
