@@ -61,7 +61,7 @@ def _smooth(values: np.ndarray) -> np.ndarray:
 
 
 def analyze_profiles_dense(
-    block: np.ndarray, offsets: np.ndarray
+    block: np.ndarray, offsets: np.ndarray, *, return_smoothed: bool = False
 ) -> dict[str, np.ndarray]:
     """Vectorized per-vertex profile features over a (th, tw, P) block.
 
@@ -145,6 +145,15 @@ def analyze_profiles_dense(
         out[key][ok] = arr[ok].astype(np.float32)
     out["multiplicity"][ok] = multiplicity[ok].astype(np.int16)
     out["com_offset"][ok & (wsum <= 0)] = np.nan
+
+    if return_smoothed:
+        out["smoothed"] = smoothed.astype(np.float32)
+        # Interior local maxima with prominence >= 0.3x main: the candidate set
+        # for snap's nearest-peak selection policy.
+        candidates = np.zeros_like(block, dtype=bool)
+        cand = is_max & (peak_prom >= 0.3 * np.maximum(prominence[..., None], 1e-12))
+        candidates[..., 1:-1] = cand & ok[..., None]
+        out["candidates"] = candidates
     return out
 
 
