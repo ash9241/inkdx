@@ -1,6 +1,50 @@
-# Progress Prize submission — draft answers (July 2026)
+# Progress Prize submission — July 2026
 
-Copy-paste material for the Google Form. Adjust to actual field names.
+**Form:** https://forms.gle/xoF5C3QsYutKP97x7 — deadline 11:59pm Pacific, July 31, 2026.
+
+Exact form fields and copy-paste answers:
+
+**Email:** aishwarya@diraclabs.com
+
+**Your full name:** Aishwarya Das
+
+**Team description:** Individual submission (Aishwarya Das), built with heavy
+use of agentic tooling (Claude Code).
+
+**URL(s) to your open source / publicly available contribution:**
+- https://github.com/ash9241/inkdx (MIT, tag v0.1.0)
+- Discord release thread: https://discord.com/channels/1079907749569237093/1162822236521115720/threads/1528098732728652017
+
+**Short description (how it substantially increases the probability of
+reading complete scrolls):** The 2026 open problems list ink diagnostics as
+having no current approach and states "better diagnostics are more important
+than better models." Reading the remaining scrolls means diagnosing, at scale,
+why ink fails to appear — without a human staring at every segment. inkdx
+answers that per 256-px tile with causally-gated attribution: SCAN (raw-voxel
+noise σ, CNR, FWHM haze), SURFACE (profile-peak offset/prominence,
+sheet-switch multiplicity, tearing, holes), MODEL (bimodal commitment vs
+mid-gray confusion), or NO_INK_EVIDENCE — trustworthy blankness, because the
+whole upstream chain checked out. It consumes community formats (OME-Zarr,
+tifxyz, layer stacks, any dense prediction map), emits machine-readable
+report.json (per-tile metrics + located suspect regions with z-score
+evidence) for downstream tools plus a self-contained HTML report for humans,
+and needs no GPU: a full 1.6-gigapixel segment diagnoses in ~10 min on 8 CPU
+cores. Attribution is validated, not asserted: induced failures on real data
+land in their own verdict class (noise → 100% SCAN; 8-voxel mesh offset on a
+raw Scroll 1 crop → 94% SURFACE; undertrained 2k-iter checkpoint → 81%
+MODEL), with limitations documented, a phantom test suite with analytic
+ground truth in CI, a shipped PHerc. Paris 4 calibration pack, and
+`inkdx calibrate` to fit packs for any scroll.
+
+**Pull request to community projects list:** ✅ done —
+https://github.com/ScrollPrize/villa/pull/1171 (awesome-scroll-tools is
+archived; the list now lives in villa's scrollprize.org/docs/20_community_projects.md)
+
+**Terms and Conditions:** check after reading.
+
+---
+
+# Original long-form draft (kept for reference)
 
 **Project name:** inkdx — ink-failure diagnostics for the virtual-unwrapping pipeline
 
