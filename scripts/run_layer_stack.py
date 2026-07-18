@@ -1,12 +1,16 @@
 #!/usr/bin/env python
-"""Run inkdx scan+surface diagnostics over a pre-extracted layer-stack segment.
+"""Run inkdx scan+surface diagnostics over a pre-extracted surface volume.
 
-A layer stack (`layers/00.tif ... NN.tif`) is a surface volume: the mesh is the
+A surface volume — a layer-TIFF directory (`layers/00.tif ...`) or an OME-Zarr
+store — is the mesh-resampled volume the ink model consumes: the mesh is the
 identity grid at the center layer and profiles read straight down the stack.
 
-Example:
+Examples:
     python scripts/run_layer_stack.py /data/w00/layers out/w00_maps.npz \
         --mask /data/w00/w00_mask.png --processes 8
+
+    python scripts/run_layer_stack.py /data/w00/w00.zarr out/w00_maps.npz \
+        --valid-from-tifxyz /data/w00 --processes 8
 """
 
 from __future__ import annotations
@@ -16,7 +20,7 @@ import time
 
 import numpy as np
 
-from inkdx.io.volume import LayerStackVolume, identity_segment
+from inkdx.io.volume import identity_segment, open_surface_volume
 from inkdx.runner import DiagnosticsConfig, run_diagnostics
 
 
@@ -37,11 +41,35 @@ def load_mask(path: str, shape_hw: tuple[int, int]) -> np.ndarray:
     return mask != 0
 
 
+def valid_from_tifxyz(tifxyz_dir: str, shape_hw: tuple[int, int]) -> np.ndarray:
+    """Validity from the segment's own z.tif (z > 0 rule), upsampled to the
+    surface-volume plane by integer repetition if the mesh is stored reduced."""
+    import tifffile
+
+    z = tifffile.imread(f"{tifxyz_dir}/z.tif")
+    valid = z > 0
+    if valid.shape != shape_hw:
+        fy = round(shape_hw[0] / valid.shape[0])
+        fx = round(shape_hw[1] / valid.shape[1])
+        if fy < 1 or fx < 1:
+            raise SystemExit(f"z.tif {valid.shape} larger than plane {shape_hw}")
+        valid = np.repeat(np.repeat(valid, fy, axis=0), fx, axis=1)[
+            : shape_hw[0], : shape_hw[1]
+        ]
+        pad_y = shape_hw[0] - valid.shape[0]
+        pad_x = shape_hw[1] - valid.shape[1]
+        if pad_y or pad_x:
+            valid = np.pad(valid, ((0, pad_y), (0, pad_x)), mode="edge")
+    return valid
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("layers_dir")
+    ap.add_argument("volume", help="layer-TIFF directory or OME-Zarr store")
     ap.add_argument("out_npz")
     ap.add_argument("--mask", default=None, help="validity mask (png/tif, nonzero=valid)")
+    ap.add_argument("--valid-from-tifxyz", default=None,
+                    help="derive validity from this tifxyz dir's z.tif")
     ap.add_argument("--z-center", type=float, default=None, help="default: stack center")
     ap.add_argument("--tile", type=int, default=256)
     ap.add_argument("--halfwidth", type=int, default=None, help="default: max symmetric")
@@ -51,11 +79,16 @@ def main() -> None:
     ap.add_argument("--expected-thickness", type=float, default=12.0)
     args = ap.parse_args()
 
-    stack = LayerStackVolume(args.layers_dir)
+    stack = open_surface_volume(args.volume)
     nz, h, w = stack.shape
     zc = args.z_center if args.z_center is not None else (nz - 1) / 2.0
     hw = args.halfwidth if args.halfwidth is not None else int(min(zc, nz - 1 - zc))
-    valid = load_mask(args.mask, (h, w)) if args.mask else None
+    valid = None
+    if args.mask:
+        valid = load_mask(args.mask, (h, w))
+    elif args.valid_from_tifxyz:
+        valid = valid_from_tifxyz(args.valid_from_tifxyz, (h, w))
+        print(f"validity from tifxyz: {valid.mean():.1%} of plane valid", flush=True)
 
     seg = identity_segment(h, w, z_center=zc, valid=valid)
     cfg = DiagnosticsConfig(

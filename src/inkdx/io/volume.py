@@ -63,6 +63,23 @@ class LayerStackVolume:
         return out if isinstance(zk, slice) else out[0]
 
 
+def open_surface_volume(path: str | Path, *, level: int = 0):
+    """Open a surface volume: a layer-TIFF directory or an OME-Zarr store.
+
+    OME-Zarr stores hold a multiscale pyramid as subgroups "0", "1", ...;
+    `level` picks one (0 = full resolution). Plain zarr arrays work too.
+    """
+    path = Path(path)
+    if path.suffix == ".zarr" or (path / ".zgroup").exists() or (path / ".zarray").exists():
+        import zarr
+
+        node = zarr.open(str(path), mode="r")
+        if hasattr(node, "keys"):  # group: multiscale pyramid
+            return node[str(level)]
+        return node
+    return LayerStackVolume(path)
+
+
 def identity_segment(
     height: int,
     width: int,
