@@ -62,9 +62,24 @@ Two levels, both in CI:
    volume with analytic ground truth. Noise / blur / mesh-offset / confused-
    probability / blank / hole ablations must each land ≥80% of affected tiles
    in exactly their own verdict class, with off-diagonal leakage <10%.
-2. **Real-segment ablations** (w00_20231016151002, PHerc. Paris 4): controlled
-   degradations of a window with known-recovered ink — noise added to the
-   surface volume (scan arm), a 12-layer z-roll so the sheet sits at the wrong
-   depth (surface arm), and an undertrained 2k-iteration checkpoint (model
-   arm) — re-inferenced and re-diagnosed. The resulting attribution matrix is
-   published in the README.
+2. **Real-data ablations**: controlled failures induced on real data with
+   known-recovered ink, re-inferenced (A100) and re-diagnosed:
+
+   | induced failure | attributed to | result |
+   |---|---|---|
+   | — (control, text window of w00) | healthy | **82%** healthy (10% scan-, 7% surface-suspect: real marginal regions) |
+   | Gaussian noise σ=25 on the volume | SCAN | **100%** SCAN_SUSPECT |
+   | mesh offset +8 vox (raw Scroll 1 crop + ridge-tracked mesh) | SURFACE | **94%** SURFACE_SUSPECT (its control: 94% healthy) |
+   | undertrained 2k-iter checkpoint on clean data | MODEL | **81%** MODEL_SUSPECT |
+
+   ![attribution matrix](images/attribution_matrix.png)
+
+   **Documented limitation:** on *resampled surface volumes* the sheet is
+   blurred to ~27 voxels FWHM and tile-level peak offsets naturally vary by
+   ±10, so a 12-layer z-roll stays within healthy variation there (a 12-layer
+   roll flipped only ~4% of tiles). The surface stage operates at full
+   precision against the raw scroll volume (clean-mesh peak offsets recovered
+   at MAD 0.0 voxels on Scroll 1) — which is where mesh QC actually happens.
+   Three of the calibration/gating rules above (percentile gap, strict-select
+   fitting, "center" orientation for peak_offset) were found by exactly these
+   real-data runs, not by the phantom.

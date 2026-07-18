@@ -18,18 +18,30 @@ import numpy as np
 _EPS = 1e-6
 
 # +1: higher is healthier. -1: higher is worse. "abs": magnitude is what's bad.
+# "center": deviation from the healthy median in EITHER direction is bad — for
+# metrics with a legitimate systematic value (e.g. peak_offset: the mesh traces
+# the recto surface, so the sheet body healthily sits several voxels off).
 ORIENTATION: dict[str, int | str] = {
     "cnr": +1, "snr": +1, "dynamic_range": +1,
     "noise_sigma": -1, "haze_index": -1, "saturation_frac": -1,
     "intensity_drift": "abs",
-    "peak_offset": "abs", "peak_prominence": +1, "peak_multiplicity": -1,
-    "com_offset": "abs", "com_smoothness": -1,
+    "peak_offset": "center", "peak_prominence": +1, "peak_multiplicity": -1,
+    "com_offset": "center", "com_smoothness": -1,
     "grid_tearing": -1, "normal_coherence": +1, "stretch_anomaly": -1,
     "hole_fraction": -1,
     "mean_prob": +1, "p95_prob": +1, "ink_frac": +1,
     "entropy": -1, "indecision_mass": -1, "prob_separation": +1,
     "confusion_index": -1, "pred_coverage": +1,
 }
+
+
+# Surface-profile metrics are only meaningful where a sheet is provably
+# present: on blank tiles the profile peak is noise, and fitting on them
+# inflates the healthy spread until real drift looks normal (found on the
+# first real-segment ablation). Fit these on the strict selection.
+STRICT_SELECT_METRICS = frozenset(
+    {"peak_offset", "peak_prominence", "peak_multiplicity", "com_offset", "com_smoothness"}
+)
 
 
 @dataclass
@@ -46,17 +58,24 @@ class CalibrationPack:
         *,
         name: str,
         select: np.ndarray | None = None,
+        strict_select: np.ndarray | None = None,
         meta: dict | None = None,
     ) -> CalibrationPack:
         """Fit healthy distributions from a control run's tile maps.
 
         `select` restricts fitting to known-healthy tiles (bool tile map).
+        `strict_select` further restricts STRICT_SELECT_METRICS (surface
+        profile metrics) to tiles where a sheet is provably present — pass the
+        INK_OK mask of the control run.
         """
         stats: dict[str, dict[str, float]] = {}
         for k, m in maps.items():
             if k not in ORIENTATION:
                 continue
-            vals = m[select] if select is not None else m
+            sel = select
+            if k in STRICT_SELECT_METRICS and strict_select is not None:
+                sel = strict_select
+            vals = m[sel] if sel is not None else m
             if ORIENTATION[k] == "abs":
                 vals = np.abs(vals)
             vals = vals[np.isfinite(vals)]
@@ -80,7 +99,9 @@ class CalibrationPack:
         # MAD) must not turn ordinary variation into huge z-scores.
         scale = max(1.4826 * s["mad"], 0.05 * abs(s["median"]), _EPS)
         z = (v - s["median"]) / scale
-        if orient == -1 or orient == "abs":
+        if orient == "center":
+            z = -np.abs(z)
+        elif orient == -1 or orient == "abs":
             z = -z
         return z.astype(np.float32)
 

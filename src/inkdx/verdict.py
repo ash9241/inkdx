@@ -37,8 +37,11 @@ STAGE_CORES: dict[str, tuple[str, ...]] = {
 # legitimate mid-probabilities — a base-rate trap found on the first real w00
 # run). confusion_index (= indecision * (1 - separation)) is ~0 for both text
 # and blank tiles and rises only for mid-gray mush; this value maps it to a
-# score of 0 (0.3 = fully confused).
-CONFUSION_FULL_SCALE = 0.3
+# score of 0. Scale calibrated on real data: healthy w00 tiles sit at p95 ~=
+# 0.05, an undertrained (2k-iter) model at median ~= 0.19, a fully confused
+# phantom at ~0.7 — 0.125 puts the default gate (tau=0.2) at CI > 0.1, 2x the
+# real healthy p95.
+CONFUSION_FULL_SCALE = 0.125
 
 
 @dataclass

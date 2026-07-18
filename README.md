@@ -64,16 +64,23 @@ with z-score evidence — built to be consumed by other tools.
 `report.html` is a single self-contained file: verdict overlay on the
 prediction, per-stage heatmaps, healthy-band histograms, region drill-downs.
 
-## Validation
+## Validation: the attribution matrix
 
-Every metric is unit-tested against a synthetic phantom with analytic ground
-truth (injected mesh offsets recovered to ±0.5 voxel, noise σ recovered from
-raw voxels, monotonicity under ablation strength). The verdict logic is tested
-as an **attribution matrix**: controlled scan / surface / model failures must
-each land in their own verdict class. See
-[docs/attribution.md](docs/attribution.md) for the causal-gating design and
-the real-segment ablation results, and [docs/metrics.md](docs/metrics.md) for
-every formula.
+Controlled failures induced on **real data** with known-recovered ink, then
+re-inferenced and re-diagnosed — each must land in its own verdict class:
+
+![attribution matrix](docs/images/attribution_matrix.png)
+
+Noise → 100% SCAN_SUSPECT. An 8-voxel mesh offset → 94% SURFACE_SUSPECT. An
+undertrained model on clean data → 81% MODEL_SUSPECT. Off-diagonal leakage
+stays at the control's own background level.
+
+Underneath, every metric is unit-tested against a synthetic phantom with
+analytic ground truth (injected mesh offsets recovered to ±0.5 voxel, noise σ
+recovered from raw voxels, monotonicity under ablation strength). See
+[docs/attribution.md](docs/attribution.md) for the causal-gating design,
+limitations, and full ablation results, and [docs/metrics.md](docs/metrics.md)
+for every formula.
 
 ## Status
 
