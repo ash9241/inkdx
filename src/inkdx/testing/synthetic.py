@@ -27,6 +27,12 @@ class PhantomParams:
     noise_sigma: float = 3.0  # additive Gaussian noise
     second_sheet_dz: float | None = None  # optional neighbor sheet offset (voxels)
     seed: int = 0
+    # Synthetic ink: intensity delta over r in ink_band (relative to the sheet
+    # surface, along +z) inside the labeled UV regions. Signed contrast — real
+    # ink may be radiodense or radiolucent.
+    ink_band: tuple[float, float] | None = None  # (a, b) in voxels, e.g. (-1, 3)
+    ink_contrast: float = -40.0
+    ink_uv_regions: tuple[tuple[int, int, int, int], ...] = ()  # (y0, x0, y1, x1)
 
 
 @dataclass
@@ -35,6 +41,7 @@ class Phantom:
     segment: Segment  # perfect mesh on the (first) sheet
     params: PhantomParams
     sheet_z: np.ndarray = field(repr=False, default=None)  # (y, x) true sheet height
+    ink_mask: np.ndarray = field(repr=False, default=None)  # (y, x) bool 2D ink label
 
 
 def sheet_height(params: PhantomParams) -> np.ndarray:
@@ -63,6 +70,15 @@ def make_phantom(params: PhantomParams | None = None) -> Phantom:
         d2b = (zz - (z_s[None, :, :] + p.second_sheet_dz)) ** 2
         vol += p.sheet_contrast * np.exp(-d2b / (2.0 * p.sheet_sigma**2))
 
+    ink_mask = np.zeros((ny, nx), dtype=bool)
+    if p.ink_band is not None and p.ink_uv_regions:
+        for y0, x0, y1, x1 in p.ink_uv_regions:
+            ink_mask[y0:y1, x0:x1] = True
+        a, b = p.ink_band
+        r = zz - z_s[None, :, :]  # offset from sheet surface along +z
+        in_band = (r >= a) & (r <= b) & ink_mask[None, :, :]
+        vol = vol + p.ink_contrast * in_band.astype(np.float32)
+
     rng = np.random.default_rng(p.seed)
     vol += rng.normal(0.0, p.noise_sigma, size=vol.shape)
     vol = np.clip(vol, 0, 255).astype(np.uint8)
@@ -76,4 +92,4 @@ def make_phantom(params: PhantomParams | None = None) -> Phantom:
         scale=(1.0, 1.0),
         uuid="phantom",
     )
-    return Phantom(volume=vol, segment=segment, params=p, sheet_z=z_s)
+    return Phantom(volume=vol, segment=segment, params=p, sheet_z=z_s, ink_mask=ink_mask)

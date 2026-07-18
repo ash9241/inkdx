@@ -60,6 +60,94 @@ def _smooth(values: np.ndarray) -> np.ndarray:
     return savgol_filter(values, window_length=window, polyorder=2)
 
 
+def analyze_profiles_dense(
+    block: np.ndarray, offsets: np.ndarray
+) -> dict[str, np.ndarray]:
+    """Vectorized per-vertex profile features over a (th, tw, P) block.
+
+    Returns per-vertex arrays: r_star, peak_value, gap_value, prominence,
+    multiplicity, com_offset, and sub-voxel r_star_subvox (parabolic
+    refinement). Semantics match `analyze_profile` per vertex — the CI
+    agreement test pins the two implementations together. Vertices with any
+    interior NaN along r get NaN features (same give-up rule as the scalar
+    path).
+    """
+    th, tw, p = block.shape
+    nan_map = np.full((th, tw), np.nan, dtype=np.float32)
+    out = {
+        "r_star": nan_map.copy(), "peak_value": nan_map.copy(),
+        "gap_value": nan_map.copy(), "prominence": nan_map.copy(),
+        "multiplicity": np.zeros((th, tw), dtype=np.int16),
+        "com_offset": nan_map.copy(), "r_star_subvox": nan_map.copy(),
+    }
+    if p < 9:
+        return out
+
+    finite = np.isfinite(block)
+    # Same rule as analyze_profile: only fully-finite center windows qualify;
+    # for the dense path we require the WHOLE profile finite (dense callers use
+    # windows that fit the volume; edge vertices fall back to held).
+    ok = finite.all(axis=-1)
+    if not ok.any():
+        return out
+
+    # Zero-fill non-finite entries: savgol's edge polyfit is batched across the
+    # whole array and chokes on any NaN. Only fully-finite (`ok`) rows are ever
+    # written to the outputs, so the fill value never leaks.
+    vals = np.where(finite, block, 0.0).astype(np.float64)
+    n = p if p % 2 else p - 1
+    window = min(7, n)
+    if window >= 5:
+        smoothed = savgol_filter(vals, window_length=window, polyorder=2, axis=-1)
+    else:
+        smoothed = vals
+
+    i_star = np.argmax(smoothed, axis=-1)
+    ii, jj = np.meshgrid(np.arange(th), np.arange(tw), indexing="ij")
+    peak_value = smoothed[ii, jj, i_star]
+    r_star = offsets[i_star].astype(np.float64)
+    gap_value = np.percentile(smoothed, 10, axis=-1)
+    prominence = peak_value - gap_value
+
+    # Local maxima by array comparison; multiplicity = peaks with >= 0.5x the
+    # main prominence (matches find_peaks(prominence=0.5*prom) closely enough
+    # for gating; the agreement test bounds the difference).
+    interior = smoothed[..., 1:-1]
+    is_max = (interior >= smoothed[..., :-2]) & (interior >= smoothed[..., 2:])
+    peak_prom = interior - gap_value[..., None]
+    big = is_max & (peak_prom >= 0.5 * np.maximum(prominence[..., None], 1e-12))
+    multiplicity = np.maximum(big.sum(axis=-1), (prominence > 0).astype(int))
+
+    # Parabolic sub-voxel refinement around i_star (clipped to interior).
+    ic = np.clip(i_star, 1, p - 2)
+    s_m = smoothed[ii, jj, ic - 1]
+    s_0 = smoothed[ii, jj, ic]
+    s_p = smoothed[ii, jj, ic + 1]
+    denom = s_m - 2.0 * s_0 + s_p
+    with np.errstate(divide="ignore", invalid="ignore"):
+        delta = 0.5 * (s_m - s_p) / denom
+    delta = np.clip(np.where(np.abs(denom) > 1e-12, delta, 0.0), -0.5, 0.5)
+    step = float(offsets[1] - offsets[0]) if p > 1 else 1.0
+    r_subvox = offsets[ic] + delta * step
+
+    # Intensity-weighted centroid in a central window (same as scalar path,
+    # with the fwhm-free default window of +/- 4).
+    win = np.abs(offsets[None, None, :] - r_star[..., None]) <= 4.0
+    w = np.clip(vals - gap_value[..., None], 0.0, None) * win
+    wsum = w.sum(axis=-1)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        com = (offsets[None, None, :] * w).sum(axis=-1) / wsum
+
+    for key, arr in (
+        ("r_star", r_star), ("peak_value", peak_value), ("gap_value", gap_value),
+        ("prominence", prominence), ("com_offset", com), ("r_star_subvox", r_subvox),
+    ):
+        out[key][ok] = arr[ok].astype(np.float32)
+    out["multiplicity"][ok] = multiplicity[ok].astype(np.int16)
+    out["com_offset"][ok & (wsum <= 0)] = np.nan
+    return out
+
+
 def analyze_profile(median_profile: np.ndarray, offsets: np.ndarray) -> ProfileFeatures:
     """Extract sheet-peak features from a tile's median profile."""
     finite = np.isfinite(median_profile)
