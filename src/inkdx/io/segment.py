@@ -60,38 +60,60 @@ class Segment:
         normal = t_row x t_col; defined only at interior vertices whose 4-neighbors
         are all valid. Orientation is geometric (from grid winding) — callers that
         need a physically consistent side must sign-check against the volume.
+
+        For gigapixel grids prefer `normals_window` — this materializes the
+        whole (H, W, 3) field.
         """
         h, w = self.grid_shape
-        out = np.full((h, w, 3), np.nan, dtype=np.float32)
-        if h < 3 or w < 3:
-            return out
+        return self.normals_window(slice(0, h), slice(0, w))
 
-        v = self.valid
-        interior = (
-            v[1:-1, 1:-1] & v[1:-1, :-2] & v[1:-1, 2:] & v[:-2, 1:-1] & v[2:, 1:-1]
-        )
+    def normals_window(self, rows: slice, cols: slice) -> np.ndarray:
+        """Normals for a sub-grid window, computed with a 1-vertex halo.
 
-        def central(a: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-            d_col = a[1:-1, 2:] - a[1:-1, :-2]
-            d_row = a[2:, 1:-1] - a[:-2, 1:-1]
-            return d_row, d_col
+        Returns (rows_len, cols_len, 3). Memory scales with the window, not the
+        grid — this is what samplers should call per tile.
+        """
+        h, w = self.grid_shape
+        r0, r1 = rows.indices(h)[:2]
+        c0, c1 = cols.indices(w)[:2]
+        # halo-expanded block
+        hr0, hc0 = max(r0 - 1, 0), max(c0 - 1, 0)
+        hr1, hc1 = min(r1 + 1, h), min(c1 + 1, w)
 
-        rx, cx = central(self.x)
-        ry, cy = central(self.y)
-        rz, cz = central(self.z)
+        x = np.asarray(self.x[hr0:hr1, hc0:hc1], dtype=np.float32)
+        y = np.asarray(self.y[hr0:hr1, hc0:hc1], dtype=np.float32)
+        z = np.asarray(self.z[hr0:hr1, hc0:hc1], dtype=np.float32)
+        v = np.asarray(self.valid[hr0:hr1, hc0:hc1])
 
-        # n = t_row x t_col
-        nx = ry * cz - rz * cy
-        ny = rz * cx - rx * cz
-        nz = rx * cy - ry * cx
-        norm = np.sqrt(nx * nx + ny * ny + nz * nz)
-        with np.errstate(invalid="ignore"):
-            norm = np.where(norm > 1e-10, norm, np.nan)
-            nx, ny, nz = nx / norm, ny / norm, nz / norm
+        bh, bw = x.shape
+        block = np.full((bh, bw, 3), np.nan, dtype=np.float32)
+        if bh >= 3 and bw >= 3:
+            interior = (
+                v[1:-1, 1:-1] & v[1:-1, :-2] & v[1:-1, 2:] & v[:-2, 1:-1] & v[2:, 1:-1]
+            )
 
-        for k, n in enumerate((nx, ny, nz)):
-            out[1:-1, 1:-1, k] = np.where(interior, n, np.nan).astype(np.float32)
-        return out
+            def central(a: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+                d_col = a[1:-1, 2:] - a[1:-1, :-2]
+                d_row = a[2:, 1:-1] - a[:-2, 1:-1]
+                return d_row, d_col
+
+            rx, cx = central(x)
+            ry, cy = central(y)
+            rz, cz = central(z)
+
+            # n = t_row x t_col
+            nx = ry * cz - rz * cy
+            ny = rz * cx - rx * cz
+            nz = rx * cy - ry * cx
+            norm = np.sqrt(nx * nx + ny * ny + nz * nz)
+            with np.errstate(invalid="ignore"):
+                norm = np.where(norm > 1e-10, norm, np.nan)
+                nx, ny, nz = nx / norm, ny / norm, nz / norm
+
+            for k, n in enumerate((nx, ny, nz)):
+                block[1:-1, 1:-1, k] = np.where(interior, n, np.nan).astype(np.float32)
+
+        return block[r0 - hr0:(r0 - hr0) + (r1 - r0), c0 - hc0:(c0 - hc0) + (c1 - c0)]
 
 
 def _read_coord(path: Path) -> np.ndarray:

@@ -92,12 +92,13 @@ def identity_segment(
     (x=c, y=r, z=z_center) in the stack's own frame, normals along the layer
     axis. Use with LayerStackVolume so profiles read straight down the stack.
     """
-    yy, xx = np.meshgrid(
-        np.arange(height, dtype=np.float32),
-        np.arange(width, dtype=np.float32),
-        indexing="ij",
-    )
-    z = np.full((height, width), float(z_center), dtype=np.float32)
+    # Broadcast views: a gigapixel identity mesh must cost O(H+W) memory,
+    # not O(H*W). Segment reads slice these lazily.
+    xx = np.broadcast_to(np.arange(width, dtype=np.float32)[None, :], (height, width))
+    yy = np.broadcast_to(np.arange(height, dtype=np.float32)[:, None], (height, width))
+    z = np.broadcast_to(np.float32(z_center), (height, width))
     if valid is None:
-        valid = np.ones((height, width), dtype=bool)
-    return Segment(x=xx, y=yy, z=z, valid=valid.astype(bool), scale=(1.0, 1.0), uuid=uuid)
+        valid = np.broadcast_to(np.bool_(True), (height, width))
+    else:
+        valid = valid.astype(bool)
+    return Segment(x=xx, y=yy, z=z, valid=valid, scale=(1.0, 1.0), uuid=uuid)

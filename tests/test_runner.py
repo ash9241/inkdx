@@ -58,3 +58,14 @@ def test_identity_segment_profiles_read_down_the_stack(tmp_path):
     maps = run_diagnostics(stack, seg, DiagnosticsConfig(tile_px=48, halfwidth=12))
     assert np.abs(maps["peak_offset"]).max() <= 1.0
     assert np.nanmin(maps["peak_prominence"]) > 10.0
+
+
+def test_identity_segment_is_lazy_at_gigapixel_scale():
+    # Broadcast views: O(H+W) memory. A 32k x 51k identity mesh must be free.
+    seg = identity_segment(32249, 51380, z_center=32.0)
+    assert seg.x.strides[0] == 0  # broadcast row axis
+    assert seg.y.strides[1] == 0
+    assert seg.z.strides == (0, 0)
+    n = seg.normals_window(slice(1000, 1004), slice(2000, 2004))
+    assert n.shape == (4, 4, 3)
+    np.testing.assert_allclose(np.abs(n[..., 2]), 1.0)

@@ -83,13 +83,15 @@ class NormalProfileSampler:
         self.samples_per_tile = int(samples_per_tile)
         self.seed = int(seed)
         self.offsets = np.arange(-self.halfwidth, self.halfwidth + 1, dtype=np.float32)
-        self._normals = segment.normals()  # (H, W, 3), NaN where undefined
 
     def sample_tile(self, tile: Tile) -> TileProfiles:
         seg = self.segment
         rows, cols = tile.rows, tile.cols
 
-        valid = seg.valid[rows, cols] & np.isfinite(self._normals[rows, cols, 0])
+        # Per-tile normals (1-vertex halo): memory scales with the tile, never
+        # the grid — gigapixel identity meshes must not materialize anything.
+        tile_normals = seg.normals_window(rows, cols)
+        valid = np.asarray(seg.valid[rows, cols]) & np.isfinite(tile_normals[..., 0])
         rr, cc = np.nonzero(valid)
         n_pts = min(self.samples_per_tile, rr.size)
         empty = TileProfiles(
@@ -107,8 +109,11 @@ class NormalProfileSampler:
         gr = rr + rows.start  # stored-grid coordinates
         gc = cc + cols.start
 
-        pos = np.stack([seg.x[gr, gc], seg.y[gr, gc], seg.z[gr, gc]], axis=1)  # (N,3) xyz
-        nrm = self._normals[gr, gc]  # (N, 3) xyz
+        pos = np.stack(
+            [np.asarray(seg.x[gr, gc]), np.asarray(seg.y[gr, gc]), np.asarray(seg.z[gr, gc])],
+            axis=1,
+        )  # (N, 3) xyz
+        nrm = tile_normals[rr, cc]  # (N, 3) xyz — tile-local indices
 
         # Orient normals consistently within the tile.
         mean_n = np.nanmean(nrm, axis=0)

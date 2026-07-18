@@ -65,12 +65,20 @@ def compute_surface_geometry_metrics(segment: Segment, tile: Tile) -> dict[str, 
     """Per-tile mesh-geometry metrics. No volume access."""
     out = dict.fromkeys(SURFACE_GEOMETRY_METRICS, np.nan)
     rows, cols = tile.rows, tile.cols
-    valid = segment.valid[rows, cols]
+    valid = np.asarray(segment.valid[rows, cols])
     out["hole_fraction"] = float(1.0 - valid.mean()) if valid.size else np.nan
     if valid.sum() < 9:
         return out
 
-    xyz = segment.xyz()[rows, cols]  # (h, w, 3)
+    # Window-local reads only — never materialize the full grid.
+    xyz = np.stack(
+        [
+            np.asarray(segment.x[rows, cols], dtype=np.float32),
+            np.asarray(segment.y[rows, cols], dtype=np.float32),
+            np.asarray(segment.z[rows, cols], dtype=np.float32),
+        ],
+        axis=-1,
+    )  # (h, w, 3)
 
     # Steps between adjacent valid vertices, in volume units.
     du = np.linalg.norm(np.diff(xyz, axis=1), axis=-1)  # (h, w-1) along cols
@@ -90,7 +98,7 @@ def compute_surface_geometry_metrics(segment: Segment, tile: Tile) -> dict[str, 
         out["grid_tearing"] = float(all_steps.max() / med)
 
     # Normal coherence: mean dot product between column-adjacent normals.
-    n = segment.normals()[rows, cols]
+    n = segment.normals_window(rows, cols)
     a, b = n[:, :-1, :], n[:, 1:, :]
     dots = (a * b).sum(axis=-1)
     dots = dots[np.isfinite(dots)]
