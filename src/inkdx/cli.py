@@ -213,6 +213,95 @@ def snap(
 
 
 @app.command()
+def label3d(
+    volume: str = typer.Option(..., help="surface volume (layers dir | zarr)"),
+    labels: str = typer.Option(..., help="2D ink label image (tif/png), grid-aligned"),
+    out: Path = typer.Option(..., help="output zarr path for the 3D labels"),
+    report: Path | None = typer.Option(None, help="receipt dir (default: <out>_report)"),
+    band_frac: float = typer.Option(0.5),
+    bg_distance: float = typer.Option(8.0),
+    fallback_distance: float = typer.Option(8.0),
+    min_ink_px: int = typer.Option(200),
+    bootstrap: int = typer.Option(200),
+    ink_threshold: float = typer.Option(0.5, help="labels > threshold*max = ink"),
+    ink_column_rest: str = typer.Option("ignore", help="ignore | bg"),
+    halfwidth: int = typer.Option(16),
+    tile: int = typer.Option(256),
+    seed: int = typer.Option(0),
+) -> None:
+    """Generate true-3D ink labels: signal-driven depth band, honest fallback."""
+    import numpy as np
+    import tifffile
+
+    from inkdx.io.volume import identity_segment, open_surface_volume
+    from inkdx.label3d.depth import STATUS_LOCALIZED, Label3dConfig, estimate_depth
+    from inkdx.label3d.emit import emit_labels
+    from inkdx.label3d.report import write_label3d_report
+
+    vol = open_surface_volume(volume)
+    nz, h, w = vol.shape
+    z_center = (nz - 1) / 2.0
+
+    if labels.endswith((".tif", ".tiff")):
+        lab = tifffile.imread(labels)
+    else:
+        from PIL import Image
+
+        Image.MAX_IMAGE_PIXELS = None
+        lab = np.asarray(Image.open(labels))
+    if lab.ndim == 3:
+        lab = lab[..., 0]
+    if lab.shape != (h, w):
+        raise typer.BadParameter(f"label shape {lab.shape} != volume plane {(h, w)}")
+    ink_mask = lab.astype(np.float32) > ink_threshold * float(lab.max() or 1)
+
+    seg = identity_segment(h, w, z_center=z_center)
+    cfg = Label3dConfig(
+        halfwidth=halfwidth, min_ink_px=min_ink_px, bootstrap=bootstrap,
+        band_frac=band_frac, fallback_distance=fallback_distance,
+        bg_distance=bg_distance, tile_px=tile, seed=seed,
+    )
+    typer.echo(f"volume {vol.shape}; ink pixels {int(ink_mask.sum())}")
+    result = estimate_depth(vol, seg, ink_mask, cfg)
+    typer.echo(f"depth status: {result.status}"
+               + (f", band [{result.band[0]:g}, {result.band[1]:g}] vox"
+                  if result.band else ""))
+
+    if result.status == STATUS_LOCALIZED:
+        # The estimated band is in PROFILE convention (along the oriented
+        # normal); emission wants the z-layer convention. The identity mesh's
+        # normals are constant — read their z sign and convert.
+        n = seg.normals_window(slice(h // 2, h // 2 + 3), slice(w // 2, w // 2 + 3))
+        nz_sign = float(np.nanmean(n[..., 2]))
+        a, b = result.band
+        band_used = (a, b) if nz_sign >= 0 else (-b, -a)
+        band_source = "signal"
+    else:
+        band_used = (-fallback_distance, fallback_distance)
+        band_source = "fallback"
+        typer.echo(f"WARNING: no depth signal — emitting symmetric fallback band "
+                   f"±{fallback_distance:g} vox, flagged in sidecars")
+
+    emit_labels(
+        out, nz=nz, z_center=z_center, ink_mask=ink_mask,
+        valid=np.ones((h, w), dtype=bool), band=band_used,
+        bg_distance=bg_distance, ink_column_rest=ink_column_rest,
+        band_source=band_source,
+        provenance={"volume": str(volume), "labels": str(labels),
+                    "status": result.status},
+    )
+    typer.echo(f"wrote {out}")
+
+    report_dir = report or Path(str(out).removesuffix(".zarr") + "_report")
+    path = write_label3d_report(
+        report_dir, result=result, cfg=cfg, band_used=band_used,
+        inputs={"volume": {"path": str(volume), "shape": list(vol.shape)},
+                "labels": {"path": str(labels)}},
+    )
+    typer.echo(f"wrote {path}")
+
+
+@app.command()
 def calibrate(
     from_run: Path = typer.Option(..., help="a run output dir (reads maps/*.tif)"),
     name: str = typer.Option(..., help="pack name, e.g. w00_pherc_paris4"),
