@@ -1,6 +1,6 @@
 [project]
 name = "inkdx"
-version = "0.1.0.dev0"
+version = "0.2.0"
 description = "Ink-failure diagnostics for the Vesuvius Challenge: when ink doesn't show up, inkdx tells you why — bad scan, bad surface, or bad model."
 readme = "README.md"
 license = { file = "LICENSE" }

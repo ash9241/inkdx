@@ -34,6 +34,26 @@ the scalloped segment boundary); purple = model confusion (near zero here).
 
 ![text closeup](docs/images/w00_verdict_closeup.jpg)
 
+## v0.2: from diagnosis to repair — `snap` and `label3d`
+
+**[`inkdx snap`](docs/snap.md)** moves a tifxyz mesh onto the true sheet
+using raw CT signal (no model, no GPU) — with anti-wrap peak selection,
+confidence-gated holds, and a built-in before/after receipt. On a w00 window:
+median sheet-peak offset **−8.0 → 0.0 vox**, prominence **+39%**, CNR
+**+39%**. Snapped outputs carry a proposed tifxyz provenance convention.
+
+![snap before/after](docs/images/w00_snap_before_after.png)
+
+**[`inkdx label3d`](docs/label3d.md)** measures **where in depth the ink
+signal actually lives** — Δ(r) between ink-labeled and matched-background
+columns, block-bootstrap significance — and emits true-3D labels (villa
+wishlist #192) in the measured band. On PHerc. Paris 4: the ink signature is
+unambiguous (p≈0.005) and **one-sided at [2, 11] vox** — the symmetric ±8
+convention half-fills ink columns with signal-free voxels. When the signal
+isn't significant, the tool says `NO_DEPTH_SIGNAL` and falls back, flagged.
+
+![ink depth](docs/images/w00_delta_r.png)
+
 ## Install
 
 ```bash
