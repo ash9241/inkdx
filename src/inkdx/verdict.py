@@ -29,8 +29,16 @@ VERDICT_ID = {name: i for i, name in enumerate(VERDICTS)}
 STAGE_CORES: dict[str, tuple[str, ...]] = {
     "scan": ("cnr", "haze_index", "noise_sigma"),
     "surface": ("peak_offset", "peak_prominence", "peak_multiplicity", "grid_tearing"),
-    "model": ("indecision_mass", "prob_separation", "entropy"),
 }
+
+# The model stage scores on an ABSOLUTE scale, not z-vs-control: probability
+# maps live on a normalized [0,1] domain, and a control fitted on mostly-blank
+# tiles makes every text tile an "indecision outlier" (stroke boundaries carry
+# legitimate mid-probabilities — a base-rate trap found on the first real w00
+# run). confusion_index (= indecision * (1 - separation)) is ~0 for both text
+# and blank tiles and rises only for mid-gray mush; this value maps it to a
+# score of 0 (0.3 = fully confused).
+CONFUSION_FULL_SCALE = 0.3
 
 
 @dataclass
@@ -59,6 +67,15 @@ def stage_scores(
             agg = np.nanmedian(low2, axis=0)
         out[stage] = (1.0 / (1.0 + np.exp(-np.clip(agg, -50, 50)))).astype(np.float32)
         out[stage][~np.isfinite(agg)] = np.nan
+
+    ci = maps.get("confusion_index")
+    if ci is None and "indecision_mass" in maps and "prob_separation" in maps:
+        ci = maps["indecision_mass"] * (1.0 - maps["prob_separation"])
+    if ci is not None:
+        score = 1.0 - np.clip(ci / CONFUSION_FULL_SCALE, 0.0, 1.0)
+        score = score.astype(np.float32)
+        score[~np.isfinite(ci)] = np.nan
+        out["model"] = score
     return out
 
 

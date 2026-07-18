@@ -28,7 +28,7 @@ ORIENTATION: dict[str, int | str] = {
     "hole_fraction": -1,
     "mean_prob": +1, "p95_prob": +1, "ink_frac": +1,
     "entropy": -1, "indecision_mass": -1, "prob_separation": +1,
-    "pred_coverage": +1,
+    "confusion_index": -1, "pred_coverage": +1,
 }
 
 

@@ -26,7 +26,7 @@ _SUSPECT = ("SCAN_SUSPECT", "SURFACE_SUSPECT", "MODEL_SUSPECT")
 _STAGE_EVIDENCE = {
     "SCAN_SUSPECT": ("cnr", "haze_index", "noise_sigma"),
     "SURFACE_SUSPECT": ("peak_offset", "peak_prominence", "peak_multiplicity", "grid_tearing"),
-    "MODEL_SUSPECT": ("indecision_mass", "prob_separation", "entropy"),
+    "MODEL_SUSPECT": ("confusion_index", "indecision_mass", "prob_separation", "entropy"),
 }
 
 

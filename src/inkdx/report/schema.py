@@ -36,12 +36,13 @@ class Summary(BaseModel):
 
 
 class TileTable(BaseModel):
-    """Columnar per-tile data, row-major over the tile grid."""
+    """Columnar per-tile data, row-major over the tile grid. None = NaN
+    (e.g. NO_DATA tiles have no scores)."""
 
     verdict: list[int]
-    confidence: list[float]
-    scores: dict[str, list[float]]
-    metrics: dict[str, list[float]]
+    confidence: list[float | None]
+    scores: dict[str, list[float | None]]
+    metrics: dict[str, list[float | None]]
 
 
 class Report(BaseModel):

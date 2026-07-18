@@ -18,7 +18,7 @@ from inkdx.grid import TileGrid
 
 MODEL_METRICS = (
     "mean_prob", "p95_prob", "ink_frac", "entropy",
-    "indecision_mass", "prob_separation", "pred_coverage",
+    "indecision_mass", "prob_separation", "confusion_index", "pred_coverage",
 )
 
 _EPS = 1e-6
@@ -46,6 +46,12 @@ def compute_model_metrics(
     q = np.clip(p, _EPS, 1.0 - _EPS)
     ent = -(q * np.log2(q) + (1.0 - q) * np.log2(1.0 - q))
     out["entropy"] = float(ent.mean())
+
+    # Confusion = fat middle AND no bimodality. Text tiles legitimately carry
+    # indecision at stroke boundaries, but they also separate strongly — this
+    # product stays low for them, and for confidently-blank tiles, and rises
+    # only for mid-gray mush. Lives on an absolute [0,1] scale by construction.
+    out["confusion_index"] = out["indecision_mass"] * (1.0 - out["prob_separation"])
     out["pred_coverage"] = 1.0  # overwritten by map-level driver where known
     return out
 

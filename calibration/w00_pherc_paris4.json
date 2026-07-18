@@ -1,0 +1,112 @@
+{
+  "inkdx_calibration_version": 1,
+  "meta": {
+    "fitted": "2026-07-18",
+    "halfwidth": 31,
+    "model_pred": "vesuvius_unet 20k iters",
+    "scroll": "PHerc. Paris 4",
+    "segment": "w00_20231016151002",
+    "surface_volume": "w00_20231016151002.zarr (65,32249,51380) u1",
+    "tile_px": 256,
+    "voxel_size_um": 7.91
+  },
+  "name": "w00_pherc_paris4",
+  "stats": {
+    "cnr": {
+      "mad": 6.904972076416016,
+      "median": 27.549083709716797
+    },
+    "com_offset": {
+      "mad": 8.042008399963379,
+      "median": 15.100982666015625
+    },
+    "com_smoothness": {
+      "mad": 4.385231971740723,
+      "median": 6.917483806610107
+    },
+    "confusion_index": {
+      "mad": 0.013721929863095284,
+      "median": 0.01391544658690691
+    },
+    "dynamic_range": {
+      "mad": 5.0,
+      "median": 107.0
+    },
+    "entropy": {
+      "mad": 0.08842075616121292,
+      "median": 0.31049495935440063
+    },
+    "grid_tearing": {
+      "mad": 0.0,
+      "median": 1.0
+    },
+    "haze_index": {
+      "mad": 0.4166666269302368,
+      "median": 1.9166666269302368
+    },
+    "hole_fraction": {
+      "mad": 0.0,
+      "median": 0.0
+    },
+    "indecision_mass": {
+      "mad": 0.03083038330078125,
+      "median": 0.03087615966796875
+    },
+    "ink_frac": {
+      "mad": 0.0121917724609375,
+      "median": 0.0121917724609375
+    },
+    "intensity_drift": {
+      "mad": 0.21299713850021362,
+      "median": 0.6034917235374451
+    },
+    "mean_prob": {
+      "mad": 0.04615388810634613,
+      "median": 0.0835367888212204
+    },
+    "noise_sigma": {
+      "mad": 0.6052688360214233,
+      "median": 1.8158066272735596
+    },
+    "normal_coherence": {
+      "mad": 0.0,
+      "median": 1.0
+    },
+    "p95_prob": {
+      "mad": 0.19607844948768616,
+      "median": 0.3137255012989044
+    },
+    "peak_multiplicity": {
+      "mad": 0.0,
+      "median": 1.0
+    },
+    "peak_offset": {
+      "mad": 8.0,
+      "median": 16.0
+    },
+    "peak_prominence": {
+      "mad": 110.47955322265625,
+      "median": 440.78533935546875
+    },
+    "pred_coverage": {
+      "mad": 0.0,
+      "median": 1.0
+    },
+    "prob_separation": {
+      "mad": 0.12156863510608673,
+      "median": 0.20000000298023224
+    },
+    "saturation_frac": {
+      "mad": 0.0,
+      "median": 0.0
+    },
+    "snr": {
+      "mad": 8.660554885864258,
+      "median": 49.1713752746582
+    },
+    "stretch_anomaly": {
+      "mad": 0.0,
+      "median": 0.0
+    }
+  }
+}
