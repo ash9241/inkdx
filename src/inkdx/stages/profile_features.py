@@ -79,13 +79,10 @@ def analyze_profile(median_profile: np.ndarray, offsets: np.ndarray) -> ProfileF
     r_star = float(offs[i_star])
     peak_value = float(smoothed[i_star])
 
-    # Flanking minima: lowest smoothed value on each side of the peak.
-    left = smoothed[:i_star]
-    right = smoothed[i_star + 1:]
-    side_minima = [float(s.min()) for s in (left, right) if s.size]
-    if not side_minima:
-        return _NAN_FEATURES
-    gap_value = float(np.mean(side_minima))
+    # Gap level: 10th percentile of the smoothed profile. Robust to an
+    # off-center peak squashing one flank (a surface failure must not read as
+    # low contrast — that would cross-talk into the scan stage).
+    gap_value = float(np.percentile(smoothed, 10))
     prominence = peak_value - gap_value
 
     # FWHM at half prominence around the main peak.
