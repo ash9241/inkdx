@@ -61,16 +61,25 @@ def emit_labels(
     ink = ink_mask.astype(bool) & valid
     bg_vertex = valid & ~ink
 
-    for z in range(nz):
-        r = float(z) - z_center
-        layer = np.full((h, w), CLASS_IGNORE, dtype=np.uint8)
-        if abs(r) <= bg_distance:
-            layer[bg_vertex] = CLASS_BACKGROUND
+    # Write chunk-aligned (z-full) tile columns: with chunks spanning all of z,
+    # per-LAYER assignment read-modify-writes every chunk 65 times over —
+    # a first w00 run projected to hours of pure chunk churn. One aligned
+    # write per chunk column instead.
+    zr = np.arange(nz, dtype=np.float32) - z_center
+    bg_z = (np.abs(zr) <= bg_distance)[:, None, None]
+    ink_z = ((zr >= a) & (zr <= b))[:, None, None]
+    _, cy, cx = arr.chunks
+    for y0 in range(0, h, cy):
+        for x0 in range(0, w, cx):
+            y1, x1 = min(y0 + cy, h), min(x0 + cx, w)
+            ink_t = ink[y0:y1, x0:x1][None]
+            bgv_t = bg_vertex[y0:y1, x0:x1][None]
+            block = np.full((nz, y1 - y0, x1 - x0), CLASS_IGNORE, dtype=np.uint8)
+            block[bg_z & bgv_t] = CLASS_BACKGROUND
             if ink_column_rest == "bg":
-                layer[ink] = CLASS_BACKGROUND
-        if a <= r <= b:
-            layer[ink] = CLASS_INK
-        arr[z] = layer
+                block[bg_z & ink_t] = CLASS_BACKGROUND
+            block[ink_z & ink_t] = CLASS_INK
+            arr[:, y0:y1, x0:x1] = block
 
     params = {
         "labels": {"background": str(CLASS_BACKGROUND), "ink": str(CLASS_INK),
